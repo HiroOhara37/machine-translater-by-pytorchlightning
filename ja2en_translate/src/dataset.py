@@ -20,6 +20,7 @@ class CustomDataset(Dataset):
             if idx % 100000 == 0:
                 print(f"read src data {idx}")
             self.src_ids.append(ja_tokenizer(src)["input_ids"])
+
         self.tgt_ids: list[list[int]] = []
         for idx, tgt in enumerate(list(df["en"])):
             if idx % 100000 == 0:

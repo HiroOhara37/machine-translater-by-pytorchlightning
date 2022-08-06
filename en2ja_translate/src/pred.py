@@ -60,30 +60,30 @@ def predict():
     ja_vocab_size: int = len(ja_tokenizer.vocab)  # 32000
     en_vocab_size: int = len(en_tokenizer.vocab)  # 30522
 
-    # ja_bos_token: int = ja_tokenizer.convert_tokens_to_ids("[CLS]")  # 2
-    # ja_eos_token: int = ja_tokenizer.convert_tokens_to_ids("[SEP]")  # 3
-    en_bos_token: int = en_tokenizer.convert_tokens_to_ids("[CLS]")  # 101
-    en_eos_token: int = en_tokenizer.convert_tokens_to_ids("[SEP]")  # 102
+    ja_bos_token: int = ja_tokenizer.convert_tokens_to_ids("[CLS]")  # 2
+    ja_eos_token: int = ja_tokenizer.convert_tokens_to_ids("[SEP]")  # 3
+    # en_bos_token: int = en_tokenizer.convert_tokens_to_ids("[CLS]")  # 101
+    # en_eos_token: int = en_tokenizer.convert_tokens_to_ids("[SEP]")  # 102
 
     # モデル生成
     model: Transformer = Transformer(
-        src_vocab_size=ja_vocab_size,
-        tgt_vocab_size=en_vocab_size,
+        src_vocab_size=en_vocab_size,
+        tgt_vocab_size=ja_vocab_size,
     )
     model_file: Path = Path(
-        "ja2en_translate/model/", "ja2en_" + args.data_mode + "_model_cpu.pth"
+        "en2ja_translate/model/", "en2ja_" + args.data_mode + "_model.pth"
     )
     model.load_state_dict(torch.load(model_file))
     model.to(DEVICE)
     model.eval()
 
     write_data_file: Path = Path(
-        "ja2en_translate/result_data/", args.data_mode + "_trans.txt"
+        "en2ja_translate/result_data/", args.data_mode + "_trans.txt"
     )
     with open(file=write_data_file, mode="w", encoding="utf-8") as fw:
         for idx, text in enumerate(list(data_frame["text"])):
             print(idx)
-            token: list[int] = ja_tokenizer.encode(text)
+            token: list[int] = en_tokenizer.encode(text)
             src_len: int = len(token)
             src: TensorType[1, src_len, long] = torch.LongTensor(token).unsqueeze(0)
             src_mask: TensorType[src_len, src_len, bool] = (
@@ -91,12 +91,12 @@ def predict():
             ).type(torch.bool)
 
             tgt_tokens: list[int] = greedy_decode(
-                model, src, src_mask, src_len, en_bos_token, en_eos_token
+                model, src, src_mask, src_len, ja_bos_token, ja_eos_token
             )
             src_text: str = text.replace("\n", "")
-            tgt_text: str = en_tokenizer.decode(tgt_tokens).replace("\t", "")
-            print(src_text)
-            print(tgt_text)
+            tgt_text: str = (
+                ja_tokenizer.decode(tgt_tokens).replace("\t", "").replace(" ", "")
+            )
             fw.write(f"{src_text}\t{tgt_text}\n")
 
 

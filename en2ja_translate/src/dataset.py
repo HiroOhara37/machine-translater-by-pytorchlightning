@@ -6,9 +6,7 @@ from torchtyping import TensorType
 
 
 class CustomDataset(Dataset):
-    def __init__(
-        self, df: pd.DataFrame, max_len: int, ja_tokenizer, en_tokenizer
-    ) -> None:
+    def __init__(self, df: pd.DataFrame, ja_tokenizer, en_tokenizer) -> None:
         # 単語の数値化 & padding
         # このコードだとJParaCrawlは処理落ちする
         # self.src_ids: list[list[int]] = ja_tokenizer(list(df["ja"]))[
@@ -20,13 +18,13 @@ class CustomDataset(Dataset):
         self.src_ids: list[list[int]] = []
         for idx, src in enumerate(list(df["en"])):
             if idx % 100000 == 0:
-                print(f"read en data {idx}")
+                print(f"read src data {idx}")
             self.src_ids.append(en_tokenizer(src)["input_ids"])
 
         self.tgt_ids: list[list[int]] = []
         for idx, tgt in enumerate(list(df["ja"])):
             if idx % 100000 == 0:
-                print(f"read ja data {idx}")
+                print(f"read tgt data {idx}")
             self.tgt_ids.append(ja_tokenizer(tgt)["input_ids"])
 
     def __len__(self) -> int:

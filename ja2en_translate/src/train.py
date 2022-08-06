@@ -7,6 +7,7 @@ from typing import Optional
 import pandas as pd
 import torch
 import torch.nn as nn
+from dataset import CustomDataset
 from sklearn.model_selection import train_test_split
 from torch import FloatTensor, float32, long
 from torch.nn.utils.rnn import pad_sequence
@@ -14,16 +15,15 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchtyping import TensorType
 from tqdm import tqdm
-from transformers import AutoTokenizer
-
-from dataset import CustomDataset
 from Transformer_model import Transformer
+from transformers import AutoTokenizer
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"device:{DEVICE}")
 # Tokenizerの読み込み
 JA_TOKENIZER = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
 EN_TOKENIZER = AutoTokenizer.from_pretrained("bert-base-uncased")
+PAD_IDX: int = JA_TOKENIZER.pad_token_id
 
 
 @dataclass
@@ -36,7 +36,7 @@ class TrainArguments:
 
 def get_args() -> TrainArguments:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_mode", default=None, type=Optional[str])
+    parser.add_argument("--data_mode", default=None, type=str)
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--max_len", default=500, type=int)
     parser.add_argument("--epoch_num", default=10, type=int)
@@ -103,9 +103,9 @@ def train(
         optimizer.zero_grad()
 
         # lossの計算
-        targets: TensorType[batch_size * (tgt_len - 1), long] = batch_tgt[
-            :, 1:
-        ].reshape(-1)
+        targets: TensorType[batch_size * (tgt_len - 1), long] = batch_tgt[:, 1:].reshape(
+            -1
+        )
         preds: TensorType[
             batch_size * (tgt_len - 1), "tgt_vocab_size", float32
         ] = output.reshape(-1, output.shape[-1])
@@ -138,9 +138,9 @@ def evaluate(
             src=batch_src, tgt=input_tgt
         )
 
-        targets: TensorType[batch_size * (tgt_len - 1), long] = batch_tgt[
-            :, 1:
-        ].reshape(-1)
+        targets: TensorType[batch_size * (tgt_len - 1), long] = batch_tgt[:, 1:].reshape(
+            -1
+        )
         preds: TensorType[
             batch_size * (tgt_len - 1), "tgt_vocab_size", float32
         ] = output.reshape(-1, output.shape[-1])
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     model.to(DEVICE)
 
     # 損失関数、最適化関数の定義
-    loss_func = nn.CrossEntropyLoss(ignore_index=0)
+    loss_func = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
     optimizer = Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 
     best_loss: float = float("inf")
@@ -227,17 +227,12 @@ if __name__ == "__main__":
     )
 
     print(f"{'-'*40}start training.{'-'*40}\n")
-    print(torch.cuda.get_device_properties(device=DEVICE).total_memory)
-
     with open(file=write_data_path, mode="w", encoding="utf-8") as fw:
         for epoch in range(1, args.epoch_num + 1):
 
             start_time: float = time.time()
-            print(torch.cuda.memory_reserved(device=DEVICE))
             train_loss: float = train(model, loss_func, optimizer, train_loader)
-            print(torch.cuda.memory_reserved(device=DEVICE))
             valid_loss: float = evaluate(model, loss_func, dev_loader)
-            print(torch.cuda.memory_reserved(device=DEVICE))
             elapsed_time: float = time.time() - start_time
 
             print(

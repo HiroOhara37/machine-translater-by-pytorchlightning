@@ -20,11 +20,15 @@ from transformers import AutoTokenizer
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"device:{DEVICE}")
+# Tokenizerの読み込み
+JA_TOKENIZER = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
+EN_TOKENIZER = AutoTokenizer.from_pretrained("bert-base-uncased")
+PAD_IDX: int = JA_TOKENIZER.pad_token_id
 
 
 @dataclass
 class TrainArguments:
-    data_mode: str
+    data_mode: str  # 学習に用いるデータのフォルダ名
     batch_size: int
     max_len: int
     epoch_num: int
@@ -32,11 +36,14 @@ class TrainArguments:
 
 def get_args() -> TrainArguments:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data_mode", type=str)
+    parser.add_argument("--data_mode", default=None, type=str)
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--max_len", default=500, type=int)
     parser.add_argument("--epoch_num", default=10, type=int)
     parse_args: argparse.Namespace = parser.parse_args()
+
+    assert parse_args.data_mode is not None, "data_mode must have some input."
+
     args: TrainArguments = TrainArguments(
         data_mode=parse_args.data_mode,
         batch_size=parse_args.batch_size,
@@ -48,19 +55,23 @@ def get_args() -> TrainArguments:
 
 
 def generate_batch(
-    batch_data: list[tuple[TensorType["length", long], TensorType["length", long]]],
+    batch_data: list[tuple[TensorType["src_len", long], TensorType["tgt_len", long]]],
 ) -> tuple[
-    TensorType["batch_size", "max_text_len", float32],
-    TensorType["batch_size", "max_text_len", float32],
+    TensorType["batch_size", "max_src_len", float32],
+    TensorType["batch_size", "max_tgt_len", float32],
 ]:
-    batch_src: list[torch.Tensor] = []
-    batch_tgt: list[torch.Tensor] = []
+    batch_src_list: list[TensorType["src_len", long]] = []
+    batch_tgt_list: list[TensorType["tgt_len", long]] = []
     for src, tgt in batch_data:
-        batch_src.append(src)
-        batch_tgt.append(tgt)
+        batch_src_list.append(src)
+        batch_tgt_list.append(tgt)
 
-    batch_src = pad_sequence(batch_src, batch_first=True)  # type: ignore
-    batch_tgt = pad_sequence(batch_tgt, batch_first=True)  # type: ignore
+    batch_src: TensorType["batch_size", "max_src_len", long] = pad_sequence(
+        batch_src_list, batch_first=True
+    ).type(long)
+    batch_tgt: TensorType["batch_size", "max_tgt_len", long] = pad_sequence(
+        batch_tgt_list, batch_first=True
+    ).type(long)
 
     return batch_src, batch_tgt
 
@@ -73,20 +84,20 @@ def train(
 ) -> float:
     model.train()
     losses: float = 0
-    for idx, batch in enumerate(tqdm(train_loader)):
+    for _, batch in enumerate(tqdm(train_loader)):
         batch_size: int = batch[0].size(0)
         src_len: int = batch[0].size(1)
         tgt_len: int = batch[1].size(1)
 
-        batch_src: TensorType[batch_size, src_len, float32] = batch[0].to(DEVICE)
-        batch_tgt: TensorType[batch_size, tgt_len, float32] = batch[1].to(DEVICE)
-
+        batch_src: TensorType[batch_size, src_len, long] = batch[0].to(DEVICE)
+        batch_tgt: TensorType[batch_size, tgt_len, long] = batch[1].to(DEVICE)
         input_tgt: TensorType[batch_size, tgt_len - 1, long] = batch_tgt[:, :-1]
-        output: TensorType[batch_size, tgt_len - 1, tgt_vocab_size, float32] = model(
+
+        output: TensorType[batch_size, tgt_len - 1, "tgt_vocab_size", float32] = model(
             src=batch_src, tgt=input_tgt
         )
         assert output.size() == torch.Size(
-            [batch_size, tgt_len - 1, tgt_vocab_size]
+            [batch_size, tgt_len - 1, "tgt_vocab_size"]
         ), f"output size is {output.size()}. It is not expected size."
 
         optimizer.zero_grad()
@@ -96,7 +107,7 @@ def train(
             -1
         )
         preds: TensorType[
-            batch_size * (tgt_len - 1), tgt_vocab_size, float32
+            batch_size * (tgt_len - 1), "tgt_vocab_size", float32
         ] = output.reshape(-1, output.shape[-1])
 
         loss: torch.FloatTensor = loss_func(preds, targets)
@@ -114,16 +125,16 @@ def evaluate(
 ) -> float:
     model.eval()
     losses: float = 0
-    for idx, batch in enumerate(dev_loader):
+    for _, batch in enumerate(dev_loader):
         batch_size: int = batch[0].size(0)
         src_len: int = batch[0].size(1)
         tgt_len: int = batch[1].size(1)
 
         batch_src: TensorType[batch_size, src_len, long] = batch[0].to(DEVICE)
         batch_tgt: TensorType[batch_size, tgt_len, long] = batch[1].to(DEVICE)
-
         input_tgt: TensorType[batch_size, tgt_len - 1, long] = batch_tgt[:, :-1]
-        output: TensorType[batch_size, tgt_len - 1, tgt_vocab_size, float32] = model(
+
+        output: TensorType[batch_size, tgt_len - 1, "tgt_vocab_size", float32] = model(
             src=batch_src, tgt=input_tgt
         )
 
@@ -153,30 +164,24 @@ if __name__ == "__main__":
     dev_data, test_data = train_test_split(dev_test_data, test_size=0.5)
     print(f"{'-'*40}finish read datafile.{'-'*40}\n{train_data.head(3)}\n")
 
-    # Tokenizerの読み込み
-    ja_tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
-    en_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    src_vocab_size: int = len(en_tokenizer.vocab)
-    tgt_vocab_size: int = len(ja_tokenizer.vocab)
+    ja_vocab_size: int = len(EN_TOKENIZER.vocab)
+    en_vocab_size: int = len(JA_TOKENIZER.vocab)
 
     # dataset作成
     train_dataset = CustomDataset(
         df=train_data,
-        max_len=args.max_len,
-        ja_tokenizer=ja_tokenizer,
-        en_tokenizer=en_tokenizer,
+        ja_tokenizer=JA_TOKENIZER,
+        en_tokenizer=EN_TOKENIZER,
     )
     dev_dataset = CustomDataset(
         df=dev_data,
-        max_len=args.max_len,
-        ja_tokenizer=ja_tokenizer,
-        en_tokenizer=en_tokenizer,
+        ja_tokenizer=JA_TOKENIZER,
+        en_tokenizer=EN_TOKENIZER,
     )
     test_dataset = CustomDataset(
         df=test_data,
-        max_len=args.max_len,
-        ja_tokenizer=ja_tokenizer,
-        en_tokenizer=en_tokenizer,
+        ja_tokenizer=JA_TOKENIZER,
+        en_tokenizer=EN_TOKENIZER,
     )
     print(f"{'-'*40}finish make dataset.{'-'*40}\n")
     print(f"train dataset num = {train_dataset.__len__()}")
@@ -203,14 +208,14 @@ if __name__ == "__main__":
 
     # モデル生成
     model: Transformer = Transformer(
-        src_vocab_size=src_vocab_size,
-        tgt_vocab_size=tgt_vocab_size,
+        src_vocab_size=en_vocab_size,
+        tgt_vocab_size=ja_vocab_size,
         max_len=args.max_len,
     )
     model.to(DEVICE)
 
     # 損失関数、最適化関数の定義
-    loss_func = nn.CrossEntropyLoss(ignore_index=0)
+    loss_func = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
     optimizer = Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 
     best_loss: float = float("inf")
@@ -222,17 +227,12 @@ if __name__ == "__main__":
     )
 
     print(f"{'-'*40}start training.{'-'*40}\n")
-    print(torch.cuda.get_device_properties(device=DEVICE).total_memory)
-
     with open(file=write_data_path, mode="w", encoding="utf-8") as fw:
         for epoch in range(1, args.epoch_num + 1):
 
             start_time: float = time.time()
-            print(torch.cuda.memory_reserved(device=DEVICE))
             train_loss: float = train(model, loss_func, optimizer, train_loader)
-            print(torch.cuda.memory_reserved(device=DEVICE))
             valid_loss: float = evaluate(model, loss_func, dev_loader)
-            print(torch.cuda.memory_reserved(device=DEVICE))
             elapsed_time: float = time.time() - start_time
 
             print(
@@ -259,6 +259,7 @@ if __name__ == "__main__":
 
     # モデルの保存
     if best_model:
+        best_model.to("cpu")
         torch.save(
             best_model.state_dict(),
             Path("en2ja_translate/model", "en2ja_" + args.data_mode + "_model.pth"),
