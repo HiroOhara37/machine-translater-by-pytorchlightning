@@ -1,8 +1,11 @@
 # Transformer_translate
 ## 説明
-[pytorchの公式チュートリアル](https://torch.classcat.com/2021/04/25/pytorch-1-8-tutorials-beginner-translation-transformer/)を参考に、翻訳モデルを構築した。  
+[pytorchの公式チュートリアル](https://torch.classcat.com/2021/04/25/pytorch-1-8-tutorials-beginner-translation-transformer/)を参考に、Transformer Encoder Decoderによる翻訳モデルを構築した。  
 公式チュートリアルのコードでは`batch_first`になっていないため、
 `batch_first`で動くよう各部を変更し、各Tensorのサイズを型ヒントで追加した。  
+
+torch==1.12よりtorchtextの仕様が変わり、datasetの生成やvocabのbuildが面倒になった。  
+huggingfaceのBERT Tokenizerが非常に便利であり精度に大きな影響を与えないので、tokenizerやvocabはBERT Tokenizerを利用している。  
 
 ## 使い方
 ### 【学習データ】

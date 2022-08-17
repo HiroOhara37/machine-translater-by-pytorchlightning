@@ -4,6 +4,10 @@ __pycache__/
 sentence_bert/
 simCSE/
 make_dataset/
+GAN/
+mnist/
+ADNet/
+trans_data/
 /data/*
 !data/.gitkeep
 b.py

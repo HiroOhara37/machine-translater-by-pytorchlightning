@@ -2,40 +2,40 @@ from pathlib import Path
 
 import pandas as pd
 import torch
-from torch import bool, float32, long
+from torch import Tensor, bool, long
 from torchtyping import TensorType
 from train import EN_TOKENIZER, JA_TOKENIZER, TrainArguments, get_args
-from Transformer_model import Transformer, generate_square_subsequent_mask
+from Transformer_model import DEVICE, Transformer, generate_square_subsequent_mask
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 INPUT_FILE_PATH: Path = Path("data/sample_directory/sample_file.txt")
 
 
 @torch.no_grad()
 def greedy_decode(
     model: Transformer,
-    src: TensorType[1, "src_len", long],
-    src_mask: TensorType["src_len", "src_len", bool],
+    src: Tensor,  # TensorType[1, "src_len", long]
+    src_mask: Tensor,  # TensorType["src_len", "src_len", bool]
     src_len: int,
     bos: int,
     eos: int,
-):
+) -> list[int]:
     src = src.to(DEVICE)
     src_mask = src_mask.to(DEVICE)
-    memory: TensorType[1, src_len, "d_model", float32] = model.encode(src, src_mask).to(
-        DEVICE
-    )
-    tgt: TensorType[1, "tgt_len", long] = (
-        torch.ones(1, 1).fill_(bos).type(torch.long).to(DEVICE)
-    )
+    # TensorType[1, src_len, "d_model", float32]
+    memory: Tensor = model.encode(src, src_mask).to(DEVICE)
+    # TensorType[1, "tgt_len", long]
+    tgt: Tensor = torch.ones(1, 1).fill_(bos).type(torch.long).to(DEVICE)
 
     for _ in range(src_len + 5):
-        tgt_mask: TensorType["tgt_len", "tgt_len", bool] = (
+        # TensorType["tgt_len", "tgt_len", bool]
+        tgt_mask: Tensor = (
             (generate_square_subsequent_mask(tgt.size(1))).type(bool).to(DEVICE)
         )
 
-        out: TensorType[1, "tgt_len", "d_model"] = model.decode(tgt, memory, tgt_mask)
-        prob: TensorType[1, "tgt_vocab_size"] = model.out(out[:, -1])
+        # TensorType[1, "tgt_len", "d_model", float32]
+        out: Tensor = model.decode(tgt, memory, tgt_mask)
+        # TensorType[1, "tgt_vocab_size", float32]
+        prob: Tensor = model.out(out[:, -1])
         _, max_index = torch.max(prob, dim=1)
         next_word: int = max_index.item()
 
@@ -48,7 +48,7 @@ def greedy_decode(
     return tgt_token[1:]
 
 
-def predict():
+def predict() -> None:
     # 学習データ、設定値の取得
     args: TrainArguments = get_args()
     data_frame: pd.DataFrame = pd.read_table(INPUT_FILE_PATH, names=["text"])

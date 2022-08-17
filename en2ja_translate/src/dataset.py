@@ -1,14 +1,13 @@
 import pandas as pd
 import torch
-from torch import long
+from torch import Tensor
 from torch.utils.data import Dataset
-from torchtyping import TensorType
 
 
 class CustomDataset(Dataset):
     def __init__(self, df: pd.DataFrame, ja_tokenizer, en_tokenizer) -> None:
         # 単語の数値化 & padding
-        # このコードだとJParaCrawlは処理落ちする
+        # このコードだと大きなデータセットはメモリオーバーする
         # self.src_ids: list[list[int]] = ja_tokenizer(list(df["ja"]))[
         #    "input_ids"
         # ]
@@ -30,24 +29,13 @@ class CustomDataset(Dataset):
     def __len__(self) -> int:
         return len(self.src_ids)
 
-    def __getitem__(
-        self, index: int
-    ) -> tuple[TensorType["text_len", long], TensorType["text_len", long]]:
-        src: TensorType["text_len", long] = torch.LongTensor(self.src_ids[index])
-        tgt: TensorType["text_len", long] = torch.LongTensor(self.tgt_ids[index])
+    def __getitem__(self, index: int) -> tuple[Tensor, Tensor]:
+        """
+        return: tuple[TensorType["text_len", long], TensorType["text_len", long]]
+        """
+        # TensorType["text_len", long]
+        src: Tensor = torch.LongTensor(self.src_ids[index])
+        # # TensorType["text_len", long]
+        tgt: Tensor = torch.LongTensor(self.tgt_ids[index])
 
         return src, tgt
-
-
-class PredDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, ja_tokenizer) -> None:
-        # 単語の数値化 & padding
-        self.src_ids: list[list[int]] = ja_tokenizer(list(df))["input_ids"]
-
-    def __len__(self) -> int:
-        return len(self.src_ids)
-
-    def __getitem__(self, index: int) -> TensorType["text_len", long]:
-        src: TensorType["text_len", long] = torch.LongTensor(self.src_ids[index])
-
-        return src

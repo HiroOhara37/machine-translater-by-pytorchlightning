@@ -3,19 +3,18 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch import float32, long
+from torch import Tensor, float32
 from torch.nn.init import xavier_uniform_
-from torchtyping import TensorType
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def generate_square_subsequent_mask(
     seq_len: int,
-) -> TensorType["seq_len", "seq_len", float32]:
-    mask: TensorType["seq_len", "seq_len", float32] = (
-        torch.triu(torch.ones(seq_len, seq_len)) == 1
-    ).transpose(0, 1)
+) -> Tensor:  # TensorType["seq_len", "seq_len", float32]
+
+    # TensorType["seq_len", "seq_len", float32]
+    mask: Tensor = (torch.triu(torch.ones(seq_len, seq_len)) == 1).transpose(0, 1)
     mask = (
         mask.float()
         .masked_fill(mask == 0, float("-inf"))
@@ -26,27 +25,29 @@ def generate_square_subsequent_mask(
 
 
 def create_mask(
-    src: TensorType["BATCH_SIZE", "length", long],
-    tgt: TensorType["BATCH_SIZE", "length", long],
+    src: Tensor,  # TensorType["batch_size", "src_len", long]
+    tgt: Tensor,  # TensorType["batch_size", "src_len", long]
     pad_idx: int,
-) -> tuple[
-    TensorType["seq_len_src", "seq_len_src", bool],
-    TensorType["seq_len_tgt", "seq_len_tgt", float32],
-    TensorType["BATCH_SIZE", "length", bool],
-    TensorType["BATCH_SIZE", "length", bool],
-]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """
+    return: tuple[
+    TensorType["src_len", "src_len", bool],
+    TensorType["tgt_len", "tgt_len", float32],
+    TensorType["batch_size", "src_len", bool],
+    TensorType["batch_size", "tgt_len", bool],
+    """
     seq_len_src: int = src.shape[1]
     seq_len_tgt: int = tgt.shape[1]
 
-    mask_src: TensorType[seq_len_src, seq_len_src, bool] = torch.zeros(
-        (seq_len_src, seq_len_src)
-    ).type(torch.bool)
-    mask_tgt: TensorType[
-        seq_len_tgt, seq_len_tgt, float
-    ] = generate_square_subsequent_mask(seq_len_tgt)
+    # TensorType[seq_len_src, seq_len_src, bool]
+    mask_src: Tensor = torch.zeros((seq_len_src, seq_len_src)).type(torch.bool)
+    # TensorType[seq_len_tgt, seq_len_tgt, float]
+    mask_tgt: Tensor = generate_square_subsequent_mask(seq_len_tgt)
 
-    padding_mask_src: TensorType["BATCH_SIZE", "length", bool] = src == pad_idx
-    padding_mask_tgt: TensorType["BATCH_SIZE", "length", bool] = tgt == pad_idx
+    # TensorType["BATCH_SIZE", "src_len", bool]
+    padding_mask_src: Tensor = src == pad_idx
+    # TensorType["BATCH_SIZE", "tgt_len", bool]
+    padding_mask_tgt: Tensor = tgt == pad_idx
 
     return (
         mask_src.to(DEVICE),
@@ -63,25 +64,27 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
         self.d_model = d_model
 
-        position: TensorType[max_len, 1, float32] = torch.arange(
-            0, max_len, dtype=float32
-        ).unsqueeze(1)
-        div_term: TensorType[d_model / 2, float32] = torch.exp(
+        # TensorType[max_len, 1, float32]
+        position: Tensor = torch.arange(0, max_len, dtype=float32).unsqueeze(1)
+        # TensorType[d_model / 2, float32]
+        div_term: Tensor = torch.exp(
             torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
         )
 
-        pos_enc: TensorType[max_len, d_model, float32] = torch.zeros(max_len, d_model)
+        # TensorType[max_len, d_model, float32]
+        pos_enc: Tensor = torch.zeros(max_len, d_model)
         pos_enc[:, 0::2] = torch.sin(position * div_term)
         pos_enc[:, 1::2] = torch.cos(position * div_term)
 
-        positional_encoding: TensorType[1, max_len, d_model, float32] = pos_enc.unsqueeze(
-            0
-        )
+        # TensorType[1, max_len, d_model, float32]
+        positional_encoding: Tensor = pos_enc.unsqueeze(0)
         self.register_buffer("positional_encoding", positional_encoding)
 
-    def forward(
-        self, token_emb: TensorType["batch_size", "length", "d_model", float32]
-    ) -> TensorType["batch_size", "length", "d_model", float32]:
+    def forward(self, token_emb: Tensor) -> Tensor:
+        """
+        token_emb: TensorType["batch_size", "token_len", "d_model", float32]
+        return: TensorType["batch_size", "token_len", "d_model", float32]
+        """
         seq_len: int = token_emb.size(1)
         token_emb = token_emb * math.sqrt(self.d_model)
         token_emb = token_emb + self.positional_encoding[:, :seq_len]
@@ -142,37 +145,43 @@ class Transformer(nn.Module):
 
     def forward(
         self,
-        src: TensorType["batch_size", "length", long],
-        tgt: TensorType["batch_size", "length", long],
-        src_mask: Optional[torch.Tensor] = None,
-        tgt_mask: Optional[torch.Tensor] = None,
-        # memory_mask: Optional[torch.Tensor] = None,
-        src_key_padding_mask: Optional[torch.Tensor] = None,
-        tgt_key_padding_mask: Optional[torch.Tensor] = None,
+        src: Tensor,
+        tgt: Tensor,
+        src_mask: Optional[Tensor] = None,
+        tgt_mask: Optional[Tensor] = None,
+        # memory_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None,
+        tgt_key_padding_mask: Optional[Tensor] = None,
         # memory_key_padding_mask: Optional[torch.Tensor] = None,
-    ) -> TensorType["batch_size", "length", "tgt_vocab_size", float32]:
+    ) -> Tensor:
+        """
+        src: TensorType["batch_size", "src_len", long]
+        tgt: TensorType["batch_size", "tgt_len", long]
+        src_mask: TensorType["src_len", "src_len", bool]
+        tgt_mask: TensorType["tgt_len", "tgt_len", float32]
+        src_key_padding_mask: TensorType["batch_size", "src_len", bool]
+        tgt_key_padding_mask: TensorType["batch_size", "tgt_len", bool]
 
+        return: TensorType["batch_size", "tgt_len", "tgt_vocab_size", float32]
+        """
         src_mask, tgt_mask, src_key_padding_mask, tgt_key_padding_mask = create_mask(
             src, tgt, pad_idx=0
         )
 
-        src_emb: TensorType[
-            "batch_size", "src_length", "d_model", float32
-        ] = self.pos_encoder(self.src_embedding(src))
+        # TensorType["batch_size", "src_len", "d_model", float32]
+        src_emb: Tensor = self.pos_encoder(self.src_embedding(src))
+        # TensorType["batch_size", "tgt_len", "d_model", float32]
+        tgt_emb: Tensor = self.pos_encoder(self.tgt_embedding(tgt))
 
-        tgt_emb: TensorType[
-            "batch_size", "tgt_length", "d_model", float32
-        ] = self.pos_encoder(self.tgt_embedding(tgt))
-
-        memory = self.encoder(
+        # TensorType["batch_size", "src_len", "d_model", float32]
+        memory: Tensor = self.encoder(
             src=src_emb,
             mask=src_mask,
             src_key_padding_mask=src_key_padding_mask,
         )
 
-        model_output: TensorType[
-            "batch_size", "tgt_length", "d_model", float32
-        ] = self.decoder(
+        # TensorType["batch_size", "tgt_len", "d_model", float32]
+        model_output: Tensor = self.decoder(
             tgt=tgt_emb,
             memory=memory,
             tgt_mask=tgt_mask,
@@ -181,14 +190,32 @@ class Transformer(nn.Module):
             memory_key_padding_mask=src_key_padding_mask,
         )
 
-        output: TensorType[
-            "batch_size", "tgt_length", "tgt_vocab_size", float32
-        ] = self.out(model_output)
+        # TensorType["batch_size", "tgt_len", "tgt_vocab_size", float32]
+        output: Tensor = self.out(model_output)
 
         return output
 
-    def encode(self, src, src_mask):
+    def encode(self, src: Tensor, src_mask: Tensor) -> Tensor:
+        """
+        src: TensorType[batch_size, src_len, long]
+        src: mask: TensorType[src_len, src_len, bool]
+        return: TensorType["batch_size", "src_len", "d_model", float32]
+        """
         return self.encoder(self.pos_encoder(self.src_embedding(src)), src_mask)
 
-    def decode(self, tgt, memory, tgt_mask):
-        return self.decoder(self.pos_encoder(self.tgt_embedding(tgt)), memory, tgt_mask)
+    def decode(self, tgt: Tensor, memory: Tensor, tgt_mask: Tensor) -> Tensor:
+        """
+        tgt: TensorType[batch_size, tgt_len, long]
+        memory: TensorType[batch_size, src_len, d_model, float32]
+        tgt_mask: TensorType[tgt_len, tgt_len, bool]
+
+        return: TensorType["batch_size", "tgt_len", "tgt_vocab_size"]
+        """
+        # TensorType["batch_size", "tgt_len", "d_model"]
+        model_output: Tensor = self.decoder(
+            tgt=self.pos_encoder(self.tgt_embedding(tgt)),
+            memory=memory,
+            tgt_mask=tgt_mask,
+        )
+
+        return self.out(model_output)

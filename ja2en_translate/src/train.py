@@ -9,16 +9,15 @@ import torch
 import torch.nn as nn
 from dataset import CustomDataset
 from sklearn.model_selection import train_test_split
-from torch import FloatTensor, float32, long
+from torch import FloatTensor, Tensor, float32, long
 from torch.nn.utils.rnn import pad_sequence
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchtyping import TensorType
 from tqdm import tqdm
-from Transformer_model import Transformer
+from Transformer_model import DEVICE, Transformer
 from transformers import AutoTokenizer
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"device:{DEVICE}")
 # Tokenizerの読み込み
 JA_TOKENIZER = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
@@ -39,7 +38,7 @@ def get_args() -> TrainArguments:
     parser.add_argument("--data_mode", default=None, type=str)
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--max_len", default=500, type=int)
-    parser.add_argument("--epoch_num", default=10, type=int)
+    parser.add_argument("--epoch_num", default=100, type=int)
     parse_args: argparse.Namespace = parser.parse_args()
 
     assert parse_args.data_mode is not None, "data_mode must have some input."
@@ -55,23 +54,26 @@ def get_args() -> TrainArguments:
 
 
 def generate_batch(
-    batch_data: list[tuple[TensorType["src_len", long], TensorType["tgt_len", long]]],
-) -> tuple[
-    TensorType["batch_size", "max_src_len", float32],
-    TensorType["batch_size", "max_tgt_len", float32],
-]:
-    batch_src_list: list[TensorType["src_len", long]] = []
-    batch_tgt_list: list[TensorType["tgt_len", long]] = []
+    batch_data: list[tuple[Tensor, Tensor]],
+) -> tuple[Tensor, Tensor]:
+    """
+    batch_data: list[tuple[TensorType[src_len, long], TensorType[tgt_len, long]]]
+    return: tuple[TensorType["batch_size", "max_src_len", float32],
+                  TensorType["batch_size", "max_tgt_len", float32],
+            ]
+    """
+    # TensorType[src_len, long]
+    batch_src_list: list[Tensor] = []
+    # TensorType[tgt_len, long]
+    batch_tgt_list: list[Tensor] = []
     for src, tgt in batch_data:
         batch_src_list.append(src)
         batch_tgt_list.append(tgt)
 
-    batch_src: TensorType["batch_size", "max_src_len", long] = pad_sequence(
-        batch_src_list, batch_first=True
-    ).type(long)
-    batch_tgt: TensorType["batch_size", "max_tgt_len", long] = pad_sequence(
-        batch_tgt_list, batch_first=True
-    ).type(long)
+    # TensorType["batch_size", "max_src_len", long]
+    batch_src: Tensor = pad_sequence(batch_src_list, batch_first=True).type(long)
+    # TensorType["batch_size", "max_tgt_len", long]
+    batch_tgt: Tensor = pad_sequence(batch_tgt_list, batch_first=True).type(long)
 
     return batch_src, batch_tgt
 
@@ -93,11 +95,10 @@ def train(
         batch_tgt: TensorType[batch_size, tgt_len, long] = batch[1].to(DEVICE)
         input_tgt: TensorType[batch_size, tgt_len - 1, long] = batch_tgt[:, :-1]
 
-        output: TensorType[batch_size, tgt_len - 1, "tgt_vocab_size", float32] = model(
-            src=batch_src, tgt=input_tgt
-        )
+        # TensorType[batch_size, tgt_len - 1, "tgt_vocab_size", float32]
+        output: Tensor = model(src=batch_src, tgt=input_tgt)
         assert output.size() == torch.Size(
-            [batch_size, tgt_len - 1, "tgt_vocab_size"]
+            [batch_size, tgt_len - 1, en_vocab_size]
         ), f"output size is {output.size()}. It is not expected size."
 
         optimizer.zero_grad()
@@ -134,16 +135,12 @@ def evaluate(
         batch_tgt: TensorType[batch_size, tgt_len, long] = batch[1].to(DEVICE)
         input_tgt: TensorType[batch_size, tgt_len - 1, long] = batch_tgt[:, :-1]
 
-        output: TensorType[batch_size, tgt_len - 1, "tgt_vocab_size", float32] = model(
-            src=batch_src, tgt=input_tgt
-        )
-
-        targets: TensorType[batch_size * (tgt_len - 1), long] = batch_tgt[:, 1:].reshape(
-            -1
-        )
-        preds: TensorType[
-            batch_size * (tgt_len - 1), "tgt_vocab_size", float32
-        ] = output.reshape(-1, output.shape[-1])
+        # TensorType[batch_size, tgt_len - 1, "tgt_vocab_size", float32]
+        output: Tensor = model(src=batch_src, tgt=input_tgt)
+        # TensorType[batch_size * (tgt_len - 1), long]
+        targets: Tensor = batch_tgt[:, 1:].reshape(-1)
+        # TensorType[batch_size * (tgt_len - 1), "tgt_vocab_size", float32]
+        preds: Tensor = output.reshape(-1, output.shape[-1])
         loss: FloatTensor = loss_func(preds, targets)
         losses += loss.item()
 
