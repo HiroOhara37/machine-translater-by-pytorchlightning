@@ -21,4 +21,6 @@ f.py
 *.txt
 *.pyc
 !requirements.txt
-.gitignore
+
+en2ja_translate/
+ja2en_translate/
