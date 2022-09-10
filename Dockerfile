@@ -4,6 +4,5 @@ RUN apt-get update
 RUN apt-get install -y python3 python3-pip git
 COPY requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
-# CMD python3 ja2en_translate/src/train.py --data_mode JESC
-# CMD python3 ja2en_translate/src/pred.py --data_mode JESC
-CMD python3 Seq_VAE/src/train.py --data_file data/NTT/persona.txt
+CMD sh pl_translate/train.sh
+# CMD sh pl_translate/pred.sh
