@@ -2,6 +2,8 @@
 .mypy_cache/
 __pycache__/
 data/
+en2ja_translate/
+ja2en_translate/
 sentence_bert/
 make_dataset/
 logs/
@@ -22,5 +24,3 @@ f.py
 *.pyc
 !requirements.txt
 
-en2ja_translate/
-ja2en_translate/
