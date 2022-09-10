@@ -209,7 +209,7 @@ class Transformer(nn.Module):
         memory: TensorType[batch_size, src_len, d_model, float32]
         tgt_mask: TensorType[tgt_len, tgt_len, bool]
 
-        return: TensorType["batch_size", "tgt_len", "tgt_vocab_size"]
+        return: TensorType["batch_size", "tgt_len", "d_model"]
         """
         # TensorType["batch_size", "tgt_len", "d_model"]
         model_output: Tensor = self.decoder(
@@ -218,4 +218,4 @@ class Transformer(nn.Module):
             tgt_mask=tgt_mask,
         )
 
-        return self.out(model_output)
+        return model_output

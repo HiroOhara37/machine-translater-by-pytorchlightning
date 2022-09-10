@@ -32,10 +32,10 @@ def greedy_decode(
             (generate_square_subsequent_mask(tgt.size(1))).type(bool).to(DEVICE)
         )
 
-        # TensorType[1, tgt_len, d_model, float32]
+        # TensorType[1, tgt_len, tgt_vocab_size, float32]
         out: Tensor = model.decode(tgt, memory, tgt_mask)
         # TensorType[1, tgt_vocab_size, float32]
-        prob: Tensor = model.out(out[:, -1])
+        prob: Tensor = out[:, -1]
         _, max_index = torch.max(prob, dim=1)
         next_word: int = max_index.item()
 

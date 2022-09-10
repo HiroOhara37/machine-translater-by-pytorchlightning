@@ -9,9 +9,9 @@ import torch
 import torch.nn as nn
 from dataset import CustomDataset
 from sklearn.model_selection import train_test_split
-from torch import FloatTensor, Tensor, float32, long
+from torch import FloatTensor, Tensor, long
 from torch.nn.utils.rnn import pad_sequence
-from torch.optim import Adam
+from torch.optim import RAdam
 from torch.utils.data import DataLoader
 from torchtyping import TensorType
 from tqdm import tqdm
@@ -31,6 +31,12 @@ class TrainArguments:
     batch_size: int
     max_len: int
     epoch_num: int
+    # Transformer parameters
+    d_model: int
+    nhead: int
+    dim_feedforward: int
+    dropout: float
+    num_layers: int
 
 
 def get_args() -> TrainArguments:
@@ -39,6 +45,11 @@ def get_args() -> TrainArguments:
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--max_len", default=500, type=int)
     parser.add_argument("--epoch_num", default=100, type=int)
+    parser.add_argument("--d_model", default=256, type=int)
+    parser.add_argument("--nhead", default=8, type=int)
+    parser.add_argument("--dim_feedforward", default=512, type=int)
+    parser.add_argument("--dropout", default=0.15, type=float)
+    parser.add_argument("--num_layers", default=3, type=int)
     parse_args: argparse.Namespace = parser.parse_args()
 
     assert parse_args.data_mode is not None, "data_mode must have some input."
@@ -48,6 +59,11 @@ def get_args() -> TrainArguments:
         batch_size=parse_args.batch_size,
         max_len=parse_args.max_len,
         epoch_num=parse_args.epoch_num,
+        d_model=parse_args.d_model,
+        nhead=parse_args.nhead,
+        dim_feedforward=parse_args.dim_feedforward,
+        dropout=parse_args.dropout,
+        num_layers=parse_args.num_layers,
     )
 
     return args
@@ -81,7 +97,7 @@ def generate_batch(
 def train(
     model: Transformer,
     loss_func: nn.CrossEntropyLoss,
-    optimizer: Adam,
+    optimizer: RAdam,
     train_loader: DataLoader,
 ) -> float:
     model.train()
@@ -104,12 +120,10 @@ def train(
         optimizer.zero_grad()
 
         # lossの計算
-        targets: TensorType[batch_size * (tgt_len - 1), long] = batch_tgt[:, 1:].reshape(
-            -1
-        )
-        preds: TensorType[
-            batch_size * (tgt_len - 1), "tgt_vocab_size", float32
-        ] = output.reshape(-1, output.shape[-1])
+        # TensorType[batch_size * (tgt_len - 1), long]
+        targets: Tensor = batch_tgt[:, 1:].reshape(-1)
+        # TensorType[batch_size * (tgt_len - 1), "tgt_vocab_size", float32]
+        preds: Tensor = output.reshape(-1, output.shape[-1])
 
         loss: FloatTensor = loss_func(preds, targets)
         loss.backward()
@@ -207,13 +221,18 @@ if __name__ == "__main__":
     model = Transformer(
         src_vocab_size=ja_vocab_size,
         tgt_vocab_size=en_vocab_size,
+        d_model=args.d_model,
+        nhead=args.nhead,
+        dim_feedforward=args.dim_feedforward,
+        dropout=args.dropout,
+        num_layers=args.num_layers,
         max_len=args.max_len,
     )
     model.to(DEVICE)
 
     # 損失関数、最適化関数の定義
     loss_func = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
-    optimizer = Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
+    optimizer = RAdam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 
     best_loss: float = float("inf")
     best_model: Optional[Transformer] = None

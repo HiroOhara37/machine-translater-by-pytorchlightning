@@ -1,20 +1,24 @@
 # new
 .mypy_cache/
 __pycache__/
+data/
 sentence_bert/
-simCSE/
 make_dataset/
-GAN/
-mnist/
-ADNet/
+logs/
+model/
+model2/
+Seq_VAE/
+T5/
 trans_data/
-/data/*
-!data/.gitkeep
+a.py
 b.py
 c.py
-check*.py
+d.py
+e.py
+f.py
 
 *.pth
 *.txt
 *.pyc
 !requirements.txt
+.gitignore
