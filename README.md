@@ -19,7 +19,7 @@ dataディレクトリに推論データのディレクトリを追加し、そ�
 - --batch_size
 - --max_len
 - --epoch_num
-
+など(詳細はtrain.pyのargsを参照)
 ## Dockerでの実行
 ```
 docker build . -t translate -f ./Dockerfile && docker run --gpus all -it --rm --mount type=bind,source="$(pwd)",target=/usr/src/app translate
