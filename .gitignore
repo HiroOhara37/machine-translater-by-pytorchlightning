@@ -1,23 +1,6 @@
 # new
 .mypy_cache/
 __pycache__/
-data/
-en2ja_translate/
-ja2en_translate/
-sentence_bert/
-make_dataset/
-logs/
-model/
-model2/
-Seq_VAE/
-T5/
-trans_data/
-a.py
-b.py
-c.py
-d.py
-e.py
-f.py
 
 *.pth
 *.txt
