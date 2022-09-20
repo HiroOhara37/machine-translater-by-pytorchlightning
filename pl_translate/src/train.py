@@ -92,7 +92,7 @@ def get_args() -> TrainArgs:
 
 if __name__ == "__main__":
     print("-" * 40 + "start run" + "-" * 40)
-    assert torch.cuda.is_available(),
+    assert torch.cuda.is_available()
     args: TrainArgs = get_args()
     data_module = DataModule(args)
     model = LitTransformer(args, args.lr)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         callbacks=[
             ModelCheckpoint(
                 dirpath="./pl_translate/model/",
-                filename="best_model",
+                filename=f"{args.train_mode}_best_model",
                 monitor="val_loss",
                 mode="min",
             ),
