@@ -1,6 +1,6 @@
 # machine-translater-by-pytorchlightning
 ## 説明
-Transformerの翻訳モデルをpytorch lightningで実装した。  
+Transformerの翻訳モデル(machine-translater-by-pytorch)をpytorch lightningで再実装した。  
 
 ## 使い方
 ### 【学習データ】
