@@ -1,4 +1,4 @@
-# Transformer_translate
+# machine-translater-by-pytorchlightning
 ## 説明
 Transformerの翻訳モデルをpytorch lightningで実装した。  
 
